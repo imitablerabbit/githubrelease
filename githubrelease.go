@@ -42,6 +42,7 @@ func init() {
 	flag.Parse()
 }
 
+// CreateReleaseRequest represents the post data in the request to create a new GitHub release.
 type CreateReleaseRequest struct {
 	TagName         string `json:"tag_name"`
 	TargetCommitish string `json:"target_commitish"`
@@ -51,7 +52,9 @@ type CreateReleaseRequest struct {
 	PreRelease      bool   `json:"prerelease"`
 }
 
-func (crr *CreateReleaseRequest) Send(apiURL, user, repo, pat string) (*CreateReleaseResponse, error) {
+// Send will send the http POST request that will create the GitHub release. A CreateReleaseResponse
+// will be returned.
+func (crr *CreateReleaseRequest) Send(apiURL, user, repo, pat string) (*Release, error) {
 	releaseURL := fmt.Sprintf("%s/repos/%s/%s/releases", apiURL, user, repo)
 	log.Printf("info: sending create request to %s", releaseURL)
 	data, err := json.Marshal(crr)
@@ -77,14 +80,16 @@ func (crr *CreateReleaseRequest) Send(apiURL, user, repo, pat string) (*CreateRe
 		return nil, fmt.Errorf("non 201 response: %s: %s", resp.Status, respData)
 	}
 	log.Printf("info: received 201 response: %s", respData)
-	crResponse := &CreateReleaseResponse{}
+	crResponse := &Release{}
 	if err := json.Unmarshal(respData, crResponse); err != nil {
 		return nil, fmt.Errorf("unmarshaling response body: %v", err)
 	}
 	return crResponse, nil
 }
 
-type CreateReleaseResponse struct {
+// Release is the data that the GitHub api sends back from the
+// create release endpoint.
+type Release struct {
 	URL        string `json:"url"`
 	HTMLURL    string `json:"html_url"`
 	AssetsURL  string `json:"assets_url"`
@@ -112,7 +117,8 @@ type CreateReleaseResponse struct {
 	Assets []map[string]interface{} `json:"assets"`
 }
 
-func (crr *CreateReleaseResponse) UploadAsset(dir, filename, pat string) error {
+// UploadAsset will upload an asset to the newly created release.
+func (crr *Release) UploadAsset(dir, filename, pat string) error {
 	filepath := dir + "/" + filename
 	data, err := ioutil.ReadFile(filepath)
 	if err != nil {
@@ -151,7 +157,7 @@ func main() {
 		Draft:           *draftFlag,
 		PreRelease:      *prereleaseFlag,
 	}
-	resp, err := req.Send(*apiURLFlag, *userFlag, *repoFlag, *patFlag)
+	release, err := req.Send(*apiURLFlag, *userFlag, *repoFlag, *patFlag)
 	if err != nil {
 		log.Fatalf("error: creating release: %v\n", err)
 	}
@@ -167,7 +173,7 @@ func main() {
 			continue
 		}
 
-		err := resp.UploadAsset(*uploadsFlag, f.Name(), *patFlag)
+		err := release.UploadAsset(*uploadsFlag, f.Name(), *patFlag)
 		if err != nil {
 			log.Printf("warn: uploading an asset: %v\n", err)
 		}
